@@ -26,7 +26,8 @@ import {
 import {
   event as d3Event,
   mouse as d3Mouse,
-  select as d3Select
+  select as d3Select,
+  selectAll as d3SelectAll
 } from 'd3-selection';
 import {
   timeFormat as d3TimeFormat,
@@ -34,6 +35,11 @@ import {
 } from 'd3-time-format';
 import d3Tip from 'd3-tip';
 import { schemeCategory10, schemeSet3, interpolateRdYlBu } from 'd3-scale-chromatic';
+
+// d3-zoom for x axis zoom & pan
+import {
+  zoom as d3Zoom
+} from 'd3-zoom';
 
 import { moveToFront as MoveToFront, gradient as Gradient } from 'svg-utils';
 import { fitToBox as TextFitToBox } from 'svg-text-fit';
@@ -95,8 +101,9 @@ export default Kapsule({
       }
     },
     width: { default: window.innerWidth },
+    // width: { default: Math.round(2*window.innerWidth/3)},
     maxHeight: { default: 640 },
-    maxLineHeight: { default: 12 },
+    maxLineHeight: { default: 20 },
     leftMargin: { default: 90 },
     rightMargin: { default: 100 },
     topMargin: {default: 26 },
@@ -338,8 +345,43 @@ export default Kapsule({
     const elem = d3Select(el)
       .attr('class', 'timelines-chart');
 
-    state.svg = elem.append('svg');
-    state.overviewAreaElem = elem.append('div');
+    // state.svg = elem.append('svg');
+    
+    // set svg to be responsive
+    // zoom and pan
+    state.svg = elem.append('svg')
+                   // .call(d3Zoom().on("wheel.zoom", function(){
+                   //          // re-scale x axis during zoom;
+                   //           state.svg.select('g.x-axis').transition()
+                   //                 .duration(50)
+                   //                 .call(state.xAxis.scale(d3Event.transform.rescaleX(state.xScale)));
+
+                   //           // // re-draw circles using new y-axis scale;
+                   //           let new_xScale = d3Event.transform.rescaleX(state.xScale);
+                   //           // state.svg.dispatch('zoom', { detail: {
+                   //           //            zoomX: state.xScale.domain(),
+                   //           //            zoomY: [null, null]
+                   //           //          }});
+
+
+                   //           state.zoomX=new_xScale.domain();
+                   //           state.zoomY=[null, null];
+
+                   //            state.svg.dispatch('zoom', { detail: {
+                   //              zoomX: state.zoomX,
+                   //              zoomY: state.zoomY
+                   //            }});
+
+                   //            state._rerender();
+                   //       }));
+                // .attr("preserveAspectRatio", "xMinYMin meet")
+                // .attr("viewBox", "0 0 600 400")
+                // .attr('width','100%');
+
+    state.overviewAreaElem = elem.append('div')
+                                 // .attr('width', '100%')
+                                 // .attr('height','100%');
+
 
     // Initialize scales and axes
     state.yScale = d3ScalePoint();
@@ -387,7 +429,7 @@ export default Kapsule({
           .node()
         );
 
-      state.graph = state.svg.append('g');
+      state.graph = state.svg.append('g')
 
       state.dateMarkerLine = state.svg.append('line').attr('class', 'x-axis-date-marker');
 
@@ -502,6 +544,7 @@ export default Kapsule({
       state.svg.call(state.segmentTooltip);
     }
 
+    // modified to only zoom on x axis
     function addZoomSelection() {
       state.graph.on('mousedown', function() {
         if (d3Select(window).on('mousemove.zoomRect')!=null) // Selection already active
@@ -527,16 +570,19 @@ export default Kapsule({
               Math.max(0, Math.min(state.graphH, d3Mouse(e)[1]))
             ];
             rect.attr('x', Math.min(startCoords[0], newCoords[0]))
-              .attr('y', Math.min(startCoords[1], newCoords[1]))
+              .attr('y', 0)
+              // .attr('y', Math.min(startCoords[1], newCoords[1]))
               .attr('width', Math.abs(newCoords[0] - startCoords[0]))
-              .attr('height', Math.abs(newCoords[1] - startCoords[1]));
+              .attr('height', state.graphH);
+              // .attr('height', Math.abs(newCoords[1] - startCoords[1]));
 
             state.svg.dispatch('zoomScent', { detail: {
               zoomX: [startCoords[0], newCoords[0]].sort(d3Ascending).map(state.xScale.invert),
-              zoomY: [startCoords[1], newCoords[1]].sort(d3Ascending).map(d =>
-                state.yScale.domain().indexOf(state.yScale.invert(d))
-                + ((state.zoomY && state.zoomY[0])?state.zoomY[0]:0)
-              )
+              // zoomY: [startCoords[1], newCoords[1]].sort(d3Ascending).map(d =>
+              //   state.yScale.domain().indexOf(state.yScale.invert(d))
+              //   + ((state.zoomY && state.zoomY[0])?state.zoomY[0]:0)
+              // )
+              zoomY: [null, null]
             }});
           })
           .on('mouseup.zoomRect', function() {
@@ -561,7 +607,8 @@ export default Kapsule({
             );
 
             const changeX=((newDomainX[1] - newDomainX[0])>(60*1000)); // Zoom damper
-            const changeY=(newDomainY[0]!=state.zoomY[0] || newDomainY[1]!=state.zoomY[1]);
+            // const changeY=(newDomainY[0]!=state.zoomY[0] || newDomainY[1]!=state.zoomY[1]);
+            const changeY = false;
 
             if (changeX || changeY) {
               state.svg.dispatch('zoom', { detail: {
@@ -731,6 +778,7 @@ export default Kapsule({
       state.nLines-=cntDwn[1];
     }
 
+    // Set up the size of graph and overview area
     function setupDimensions() {
       state.graphW = state.width-state.leftMargin-state.rightMargin;
       state.graphH = d3Min([state.nLines*state.maxLineHeight, state.maxHeight-state.topMargin-state.bottomMargin]);
@@ -772,6 +820,9 @@ export default Kapsule({
           return state.structData[i].group + '+&+' + d
         }));
       }
+
+      // add a hidden to double the space for log frequency
+      labels.splice(labels.indexOf(state.structData[0].group + '+&+' + "logs_freqency"), 0, state.structData[0].group + '+&+')
 
       state.yScale.domain(labels);
       state.yScale.range([state.graphH/labels.length*0.5, state.graphH*(1-0.5/labels.length)]);
@@ -904,7 +955,9 @@ export default Kapsule({
           });
       }
 
-      //
+      // reduce label is used to display only short labels
+      // long labels will be displayed with dot in the midst
+      // maxChars represent the max number of chars to show
 
       function reduceLabel(label, maxChars) {
         return label.length<=maxChars?label:(
@@ -955,26 +1008,212 @@ export default Kapsule({
 
       const hoverEnlargeRatio = .4;
 
-      const dataFilter = (d, i) =>
+      let dataFilter = (d, i) =>
         (maxElems==null || i<maxElems) &&
         (state.grpScale.domain().indexOf(d.group)+1 &&
         d.timeRange[1]>=state.xScale.domain()[0] &&
         d.timeRange[0]<=state.xScale.domain()[1] &&
         state.yScale.domain().indexOf(d.group+'+&+'+d.label)+1);
 
+      // define the dataFilter for rect 
+      let dataFilter_rect = (d, i) => {
+        let info = d.labelVal.split(',');
+        return info[0] == 'rect';
+      }
+
+      let dataFilter_circle = (d, i) => {
+        let info = d.labelVal.split(',');
+        return info[0] == 'circle';
+      }
+
+      // time period for the zoom section
+      // calculate the second difference
+      let period = state.xScale.domain()[1].getTime() - state.xScale.domain()[0].getTime();
+      // console.log(state.xScale.domain()[0].getTime());
+      // console.log(state.xScale.domain()[1].getTime());
+      // console.log(state.graphW);
+      let onePixelNms = period / state.graphW;
+      // console.log(onePixelNms);
+
+      let dataFilter_vertical = (d, i) => {
+        let info = d.labelVal.split(',');
+        return info[0] == 'vertical';
+      }
+
+      // This data contains only those in selected timerange
+      let dataVertical = state.flatData.filter(dataFilter).filter(dataFilter_vertical);
+      // console.log(dataVertical);
+      
+      let index = 1;
+      let pivot = 0;
+      let newDataVertical = [];
+      while(index < dataVertical.length){
+        let cnt = parseInt(dataVertical[pivot].labelVal.split(',')[2]);
+        while(index < dataVertical.length && dataVertical[index].timeRange[0].getTime() < dataVertical[pivot].timeRange[0].getTime() + onePixelNms){
+          cnt += parseInt(dataVertical[index].labelVal.split(',')[2]);
+          index++;
+        }
+        // if(pivot == 0) console.log(cnt);
+        let newItem = {
+          group: dataVertical[pivot].group,
+          label: dataVertical[pivot].label,
+          labelVal: 'vertical' + ',' + d3Min([1, cnt/1000]) + ',' + cnt,
+          timeRange:[
+            dataVertical[pivot].timeRange[0],
+            dataVertical[pivot].timeRange[1]
+          ],
+          val: dataVertical[pivot].val
+        };
+        // dataVertical[pivot].labelVal = 'vertical' + ',' + d3Min([1, cnt/1000]) + ',' + cnt
+        // newDataVertical.push(dataVertical[pivot]); 
+        newDataVertical.push(newItem);       
+        pivot = index;
+        index++;
+      }
+      if(pivot < dataVertical.length) newDataVertical.push(dataVertical[pivot]);
+      // console.log(newDataVertical[0]);
+      // console.log(newDataVertical.length);
+
       state.lineHeight = state.graphH/state.nLines*0.8;
 
-      let timelines = state.graph.selectAll('rect.series-segment').data(
-        state.flatData.filter(dataFilter),
+      // // original code for rendering only rect
+      // let timelines = state.graph.selectAll('rect.series-segment').data(
+      //   state.flatData.filter(dataFilter),
+      //   d => d.group + d.label + d.timeRange[0]
+      // );
+
+      // render both circle and rect to remove rect.series-segment
+      let timelines_rect = state.graph.selectAll('rect.series-segment').data(
+        state.flatData.filter(dataFilter).filter(dataFilter_rect),
+        d => d.group + d.label + d.timeRange[0]
+      );
+      let timelines_circle = state.graph.selectAll('circle.series-segment').data(
+        state.flatData.filter(dataFilter).filter(dataFilter_circle),
+        d => d.group + d.label + d.timeRange[0]
+      );
+      // let timelines_vertical = state.graph.selectAll('rect.series-segment-vertical').data(
+      //   state.flatData.filter(dataFilter).filter(dataFilter_vertical),
+      //   d => d.group + d.label + d.timeRange[0]
+      // );
+
+      let timelines_vertical = state.graph.selectAll('rect.series-segment-vertical').data(
+        newDataVertical,
         d => d.group + d.label + d.timeRange[0]
       );
 
-      timelines.exit()
+
+      // // original code for rendering only rect
+      // timelines.exit()
+      //   .transition().duration(state.transDuration)
+      //   .style('fill-opacity', 0)
+      //   .remove();
+
+      timelines_rect.exit()
         .transition().duration(state.transDuration)
         .style('fill-opacity', 0)
         .remove();
 
-      const newSegments = timelines.enter().append('rect')
+      timelines_circle.exit()
+        .transition().duration(state.transDuration)
+        .style('fill-opacity', 0)
+        .remove();
+
+      timelines_vertical.exit()
+        .transition().duration(state.transDuration)
+        .style('fill-opacity', 0)
+        .remove();
+
+      var timeout;
+
+      // if(renderAsCircles(state.flatData)){
+      //   const newSegments = timelines.enter().append('circle')
+      //   .attr('class', 'series-segment')
+      //   .attr('x', state.graphW/2)
+      //   .attr('y', state.graphH/2)
+      //   .attr('r', 0)
+      //   .style('fill', d => state.zColorScale(d.val))
+      //   .style('fill-opacity', 0)
+      // } else {
+      //   const newSegments = timelines.enter().append('rect')
+      //   .attr('class', 'series-segment')
+      //   .attr('rx', 1)
+      //   .attr('ry', 1)
+      //   .attr('x', state.graphW/2)
+      //   .attr('y', state.graphH/2)
+      //   .attr('width', 0)
+      //   .attr('height', 0)
+      //   .style('fill', d => state.zColorScale(d.val))
+      //   .style('fill-opacity', 0)
+      // }
+
+      // newSegments
+      //   .on('mouseover.groupTooltip', state.groupTooltip.show)
+      //   .on('mouseout.groupTooltip', state.groupTooltip.hide)
+      //   .on('mouseover.lineTooltip', state.lineTooltip.show)
+      //   .on('mouseout.lineTooltip', state.lineTooltip.hide)
+      //   .on('mouseover.segmentTooltip', state.segmentTooltip.show)
+      //   .on('mouseout.segmentTooltip',function(d){
+      //     d3Select('.segment-tooltip').transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+      //   })
+
+      //   // add hover effect for segmentTooltip
+      //   d3Select(".segment-tooltip").on('mouseover', function() {
+      //     d3Select('.segment-tooltip').transition().style("opacity", "1");
+      //     // state.segmentTooltip.style("opacity", "1");
+      //   }).on('mouseout', function(){
+      //     d3Select(".segment-tooltip").transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+          
+      //   });
+
+
+      // // append function for rendering different shapes
+      // const newSegments = timelines.enter()
+      //   .append(function(d){
+      //     const info = d.labelVal.split(',');
+      //     if(info[0] == 'rect'){
+      //       return document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      //     } else {
+      //       return document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      //     }
+      //   })
+      //   .attr('class', 'series-segment')    
+      //   .style('fill', d => state.zColorScale(d.val))
+      //   .style('fill-opacity', 0)
+      //   .on('mouseover.groupTooltip', state.groupTooltip.show)
+      //   .on('mouseout.groupTooltip', state.groupTooltip.hide)
+      //   .on('mouseover.lineTooltip', state.lineTooltip.show)
+      //   .on('mouseout.lineTooltip', state.lineTooltip.hide)
+      //   .on('mouseover.segmentTooltip', state.segmentTooltip.show)
+      //   .on('mouseout.segmentTooltip',function(d){
+      //     d3Select('.segment-tooltip').transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+      //   })
+
+      //   newSegments
+      //   .selectAll('rect.series-segment')
+      //   .attr('x', state.graphW/2)
+      //   .attr('y', state.graphH/2)
+      //   .attr('rx', 1)
+      //   .attr('ry', 1)
+      //   .attr('width', 0)
+      //   .attr('height', 0)
+
+      //   newSegments
+      //   .selectAll('circle.series-segment')
+      //   .attr('cx', state.graphW/2)
+      //   .attr('cy', state.graphH/2)
+      //   .attr('r', 0)
+
+      //   // add hover effect for segmentTooltip
+      //   d3Select(".segment-tooltip").on('mouseover', function() {
+      //     d3Select('.segment-tooltip').transition().style("opacity", "1");
+      //     // state.segmentTooltip.style("opacity", "1");
+      //   }).on('mouseout', function(){
+      //     d3Select(".segment-tooltip").transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+          
+      //   });
+
+      // code for render rect
+      const newSegments_rect = timelines_rect.enter().append('rect')
         .attr('class', 'series-segment')
         .attr('rx', 1)
         .attr('ry', 1)
@@ -989,17 +1228,195 @@ export default Kapsule({
         .on('mouseover.lineTooltip', state.lineTooltip.show)
         .on('mouseout.lineTooltip', state.lineTooltip.hide)
         .on('mouseover.segmentTooltip', state.segmentTooltip.show)
-        .on('mouseout.segmentTooltip', state.segmentTooltip.hide);
+        .on('mouseout.segmentTooltip',function(d){
+          d3Select('.segment-tooltip').transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+        })
 
-      newSegments
+      const newSegments_circle = timelines_circle.enter().append('circle')
+        .attr('class', 'series-segment')
+        .attr('cx', state.graphW/2)
+        .attr('cy', state.graphH/2)
+        .attr('r', 0)
+        .style('fill', d => state.zColorScale(d.val))
+        .style('fill-opacity', 0)
+        .on('mouseover.groupTooltip', state.groupTooltip.show)
+        .on('mouseout.groupTooltip', state.groupTooltip.hide)
+        .on('mouseover.lineTooltip', state.lineTooltip.show)
+        .on('mouseout.lineTooltip', state.lineTooltip.hide)
+        .on('mouseover.segmentTooltip', state.segmentTooltip.show)
+        .on('mouseout.segmentTooltip',function(d){
+          d3Select('.segment-tooltip').transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+        })
+        
+      const newSegments_vertical = timelines_vertical.enter().append('rect')
+        .attr('class', 'series-segment-vertical')
+        .attr('rx', 1)
+        .attr('ry', 1)
+        .attr('x', state.graphW/2)
+        .attr('y', state.graphH/2)
+        .attr('width', 0)
+        .attr('height', 0)
+        .style('fill', d => state.zColorScale(d.val))
+        .style('fill-opacity', 0)
+        .on('mouseover.groupTooltip', state.groupTooltip.show)
+        .on('mouseout.groupTooltip', state.groupTooltip.hide)
+        .on('mouseover.lineTooltip', state.lineTooltip.show)
+        .on('mouseout.lineTooltip', state.lineTooltip.hide)
+        .on('mouseover.segmentTooltip', state.segmentTooltip.show)
+        .on('mouseout.segmentTooltip',function(d){
+          d3Select('.segment-tooltip').transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+        })
+
+
+        // add hover effect for segmentTooltip
+        d3Select(".segment-tooltip").on('mouseover', function() {
+          d3Select('.segment-tooltip').transition().style("opacity", "1");
+          // state.segmentTooltip.style("opacity", "1");
+        }).on('mouseout', function(){
+          d3Select(".segment-tooltip").transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+          
+        });
+      // // original code for only render rect
+      // const newSegments = timelines.enter().append('rect')
+      //   .attr('class', 'series-segment')
+      //   .attr('rx', 1)
+      //   .attr('ry', 1)
+      //   .attr('x', state.graphW/2)
+      //   .attr('y', state.graphH/2)
+      //   .attr('width', 0)
+      //   .attr('height', 0)
+      //   .style('fill', d => state.zColorScale(d.val))
+      //   .style('fill-opacity', 0)
+      //   .on('mouseover.groupTooltip', state.groupTooltip.show)
+      //   .on('mouseout.groupTooltip', state.groupTooltip.hide)
+      //   .on('mouseover.lineTooltip', state.lineTooltip.show)
+      //   .on('mouseout.lineTooltip', state.lineTooltip.hide)
+      //   .on('mouseover.segmentTooltip', state.segmentTooltip.show)
+      //   .on('mouseout.segmentTooltip',function(d){
+      //     d3Select('.segment-tooltip').transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+      //   })
+
+      //   // add hover effect for segmentTooltip
+      //   d3Select(".segment-tooltip").on('mouseover', function() {
+      //     d3Select('.segment-tooltip').transition().style("opacity", "1");
+      //     // state.segmentTooltip.style("opacity", "1");
+      //   }).on('mouseout', function(){
+      //     d3Select(".segment-tooltip").transition().duration(1000).style("opacity", "0").on("end", state.segmentTooltip.hide);
+          
+      //   });
+
+      // newSegments
+      //   .on('mouseover', function() {
+      //     if ('disableHover' in state && state.disableHover)
+      //       return;
+
+      //     MoveToFront()(this);
+
+      //     const hoverEnlarge = state.lineHeight*hoverEnlargeRatio;
+
+      //     // // original code for rendering only rect
+      //     // d3Select(this)
+      //     //   .transition().duration(70)
+      //     //   .attr('x', function (d) {
+      //     //     return state.xScale(d.timeRange[0])-hoverEnlarge/2;
+      //     //   })
+      //     //   .attr('width', function (d) {
+      //     //     return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])])+hoverEnlarge;
+      //     //   })
+      //     //   .attr('y', function (d) {
+      //     //     return state.yScale(d.group+'+&+'+d.label)-(state.lineHeight+hoverEnlarge)/2;
+      //     //   })
+      //     //   .attr('height', state.lineHeight+hoverEnlarge)
+      //     //   .style('fill-opacity', 1);
+
+      //     if(renderAsCircles(state.flatData)){
+      //       d3Select(this)
+      //       .transition().duration(70)
+      //       .attr('x', function (d) {
+      //         return state.xScale(d.timeRange[0])-hoverEnlarge/2;
+      //       })
+      //       .attr('y', function (d) {
+      //         return state.yScale(d.group+'+&+'+d.label)-(state.lineHeight+hoverEnlarge)/2;
+      //       })
+      //       .attr('r',(state.lineHeight+hoverEnlarge)/2)
+      //       .style('fill-opacity', 1);
+      //     } else {
+      //       d3Select(this)
+      //       .transition().duration(70)
+      //       .attr('x', function (d) {
+      //         return state.xScale(d.timeRange[0])-hoverEnlarge/2;
+      //       })
+      //       .attr('width', function (d) {
+      //         return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])])+hoverEnlarge;
+      //       })
+      //       .attr('y', function (d) {
+      //         return state.yScale(d.group+'+&+'+d.label)-(state.lineHeight+hoverEnlarge)/2;
+      //       })
+      //       .attr('height', state.lineHeight+hoverEnlarge)
+      //       .style('fill-opacity', 1);
+      //     }
+      //   })
+      //   .on('mouseout', function() {
+
+      //     // // original code for rendering only rect
+      //     // d3Select(this)
+      //     //   .transition().duration(250)
+      //     //   .attr('x', function (d) {
+      //     //     return state.xScale(d.timeRange[0]);
+      //     //   })
+      //     //   .attr('width', function (d) {
+      //     //     return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])]);
+      //     //   })
+      //     //   .attr('y', function (d) {
+      //     //     return state.yScale(d.group+'+&+'+d.label)-state.lineHeight/2;
+      //     //   })
+      //     //   .attr('height', state.lineHeight)
+      //     //   .style('fill-opacity', .8);
+
+      //     if(renderAsCircles(state.flatData)){
+      //       d3Select(this)
+      //       .transition().duration(70)
+      //       .attr('x', function (d) {
+      //         return state.xScale(d.timeRange[0]);
+      //       })
+      //       .attr('y', function (d) {
+      //         return state.yScale(d.group+'+&+'+d.label)-state.lineHeight/2;
+      //       })
+      //       .attr('r',state.lineHeight/2)
+      //       .style('fill-opacity', .8);
+      //     } else {
+      //       d3Select(this)
+      //       .transition().duration(250)
+      //       .attr('x', function (d) {
+      //         return state.xScale(d.timeRange[0]);
+      //       })
+      //       .attr('width', function (d) {
+      //         return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])]);
+      //       })
+      //       .attr('y', function (d) {
+      //         return state.yScale(d.group+'+&+'+d.label)-state.lineHeight/2;
+      //       })
+      //       .attr('height', state.lineHeight)
+      //       .style('fill-opacity', .8);
+      //     }
+      //   })
+      //   .on('click', function (s) {
+      //     if (state.onSegmentClick)
+      //       state.onSegmentClick(s);
+      //   });
+
+        // render rect and circle separately
+        const hoverEnlarge = state.lineHeight*hoverEnlargeRatio;
+
+        newSegments_rect
         .on('mouseover', function() {
           if ('disableHover' in state && state.disableHover)
             return;
 
           MoveToFront()(this);
 
-          const hoverEnlarge = state.lineHeight*hoverEnlargeRatio;
-
+          // const hoverEnlarge = state.lineHeight*hoverEnlargeRatio;
+          // original code for rendering only rect
           d3Select(this)
             .transition().duration(70)
             .attr('x', function (d) {
@@ -1013,8 +1430,9 @@ export default Kapsule({
             })
             .attr('height', state.lineHeight+hoverEnlarge)
             .style('fill-opacity', 1);
-        })
+          })
         .on('mouseout', function() {
+          // original code for rendering only rect
           d3Select(this)
             .transition().duration(250)
             .attr('x', function (d) {
@@ -1028,15 +1446,157 @@ export default Kapsule({
             })
             .attr('height', state.lineHeight)
             .style('fill-opacity', .8);
-        })
+          })
         .on('click', function (s) {
           if (state.onSegmentClick)
             state.onSegmentClick(s);
         });
 
-      timelines = timelines.merge(newSegments);
+        newSegments_circle
+        .on('mouseover', function() {
+          if ('disableHover' in state && state.disableHover)
+            return;
 
-      timelines.transition().duration(state.transDuration)
+          MoveToFront()(this);
+
+          // const hoverEnlarge = state.lineHeight*hoverEnlargeRatio;
+          // code for rendering circle
+          d3Select(this)
+            .transition().duration(70)
+            .attr('cx', function (d) {
+              return state.xScale(d.timeRange[0]);
+            })
+            .attr('cy', function (d) {
+              return state.yScale(d.group+'+&+'+d.label);
+            })
+            .attr('r', (state.lineHeight+hoverEnlarge)/5)
+            .style('fill-opacity', 1);
+          })
+        .on('mouseout', function() {
+          // code for rendering circle
+          d3Select(this)
+            .transition().duration(250)
+            .attr('cx', function (d) {
+              return state.xScale(d.timeRange[0]);
+            })
+            .attr('cy', function (d) {
+              return state.yScale(d.group+'+&+'+d.label);
+            })
+            .attr('r', state.lineHeight/5)
+            .style('fill-opacity', .8);
+          })
+        .on('click', function (s) {
+          if (state.onSegmentClick)
+            state.onSegmentClick(s);
+        });
+
+        newSegments_vertical
+        .on('mouseover', function() {
+          if ('disableHover' in state && state.disableHover)
+            return;
+
+          MoveToFront()(this);
+
+          // const hoverEnlarge = state.lineHeight*hoverEnlargeRatio;
+          // original code for rendering only rect
+          d3Select(this)
+            .transition().duration(70)
+            .attr('x', function (d) {
+              return state.xScale(d.timeRange[0])-hoverEnlarge/2;
+            })
+            .attr('width', 1+hoverEnlarge)
+            // .attr('width', function (d) {
+            //   return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])])+hoverEnlarge;
+            // })
+            .attr('y', function (d) {
+              let ratio = d.labelVal.split(',');
+              return state.yScale(d.group+'+&+')-(state.lineHeight+hoverEnlarge)/2+(1-ratio[1])*(2*state.lineHeight+hoverEnlarge);
+            })
+            .attr('height', function (d) {
+              let ratio = d.labelVal.split(',');
+              return ratio[1]*(2*state.lineHeight+hoverEnlarge);
+            })
+            .style('fill-opacity', 1);
+          })
+        .on('mouseout', function() {
+          // original code for rendering only rect
+          d3Select(this)
+            .transition().duration(250)
+            .attr('x', function (d) {
+              return state.xScale(d.timeRange[0]);
+            })
+            .attr('width', 1)
+            // .attr('width', function (d) {
+            //   // fixed width for each segment
+            //   return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])]);
+            // })
+            .attr('y', function (d) {
+              let ratio = d.labelVal.split(',');
+              return state.yScale(d.group+'+&+')-state.lineHeight/2+(1-ratio[1])*2*state.lineHeight;
+            })
+            .attr('height', function (d) {
+              let ratio = d.labelVal.split(',');
+              return ratio[1]*state.lineHeight*2;
+            })
+            .style('fill-opacity', .8);
+          })
+        .on('click', function (s) {
+          if (state.onSegmentClick)
+            state.onSegmentClick(s);
+        });
+
+      // // original code for rendering only rect
+      // timelines = timelines.merge(newSegments);
+      timelines_rect = timelines_rect.merge(newSegments_rect);
+      timelines_circle = timelines_circle.merge(newSegments_circle);
+      timelines_vertical = timelines_vertical.merge(newSegments_vertical);
+
+      // // original code for rendering only rect
+      // timelines.transition().duration(state.transDuration)
+      //   .attr('x', function (d) {
+      //     return state.xScale(d.timeRange[0]);
+      //   })
+      //   .attr('width', function (d) {
+      //     return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])]);
+      //   })
+      //   .attr('y', function (d) {
+      //     return state.yScale(d.group+'+&+'+d.label)-state.lineHeight/2;
+      //   })
+      //   .attr('height', state.lineHeight)
+      //   .style('fill-opacity', .8);
+
+      // if(renderAsCircles(state.flatData)){
+      //   timelines.transition().duration(state.transDuration)
+      //   .attr('x', function (d) {
+      //     return state.xScale(d.timeRange[0]);
+      //   })
+      //   .attr('y', function (d) {
+      //     return state.yScale(d.group+'+&+'+d.label)-state.lineHeight/2;
+      //   })
+      //   .attr('r', state.lineHeight/2)
+      //   .style('fill-opacity', .8);
+      // } else {
+      //   timelines.transition().duration(state.transDuration)
+      //   .attr('x', function (d) {
+      //     return state.xScale(d.timeRange[0]);
+      //   })
+      //   .attr('width', function (d) {
+      //     return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])]);
+      //   })
+      //   .attr('y', function (d) {
+      //     return state.yScale(d.group+'+&+'+d.label)-state.lineHeight/2;
+      //   })
+      //   .attr('height', state.lineHeight)
+      //   .style('fill-opacity', .8);
+      // }
+
+      // function renderAsCircles(d) {
+      //   const info = d.labelVal.split(',');
+      //   return info[0];
+      // }
+
+      // code for rendering rect
+      timelines_rect.transition().duration(state.transDuration)
         .attr('x', function (d) {
           return state.xScale(d.timeRange[0]);
         })
@@ -1047,6 +1607,35 @@ export default Kapsule({
           return state.yScale(d.group+'+&+'+d.label)-state.lineHeight/2;
         })
         .attr('height', state.lineHeight)
+        .style('fill-opacity', .8);
+
+      // code for rendering circle
+      timelines_circle.transition().duration(state.transDuration)
+        .attr('cx', function (d) {
+          return state.xScale(d.timeRange[0]);
+        })
+        .attr('cy', function (d) {
+          return state.yScale(d.group+'+&+'+d.label);
+        })
+        .attr('r', state.lineHeight/5)
+        .style('fill-opacity', .8);
+
+      timelines_vertical.transition().duration(state.transDuration)
+        .attr('x', function (d) {
+          return state.xScale(d.timeRange[0]);
+        })
+        .attr('width', 1)
+        // .attr('width', function (d, i) {
+        //   return d3Max([1, state.xScale(d.timeRange[1])-state.xScale(d.timeRange[0])]);
+        // })
+        .attr('y', function (d) {
+          let ratio = d.labelVal.split(',');
+          return state.yScale(d.group+'+&+')-state.lineHeight/2+(1-ratio[1])*2*state.lineHeight;
+        })
+        .attr('height', function (d) {
+          let ratio = d.labelVal.split(',');
+          return ratio[1]*state.lineHeight*2;
+        })
         .style('fill-opacity', .8);
     }
   }
